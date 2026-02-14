@@ -23,6 +23,7 @@
 import { useRef, useEffect, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS & PALETTE
@@ -428,13 +429,15 @@ class AstralScene {
     // Highlight indices (Phase 2 active satellites)
     this.activeIndices = [0, 7, 14, 22, 31, 38, 47, 55, 63, 74, 88, 101, 130, 155];
 
-    // ── Instanced mesh (uses satellite.glb first mesh, fallback to sphere) ──
-    this._buildSatInstancedMesh(new THREE.SphereGeometry(0.028, 6, 6)); // fallback while loading
+    // ── Instanced mesh — use procedural satellite shape as fallback ──
+    // If satellite.glb loads successfully it will replace this geometry.
+    // The procedural geo (box body + solar panels) looks like a real satellite.
+    this._buildSatInstancedMesh(this._buildProceduralSatGeo());
 
     // Load satellite.glb — extract first mesh geometry for instancing
     const loader = new GLTFLoader();
     loader.load(
-      "/earth.glb",
+      "/satellite.glb",
       (gltf) => {
         let satGeo = null;
 
@@ -466,9 +469,9 @@ class AstralScene {
       }
     );
 
-    // ── Danger satellite meshes (individual, also load satellite.glb) ────────
-    // Start with sphere fallback; replaced after load
-    const dGeoFallback = new THREE.SphereGeometry(0.055, 8, 8);
+    // ── Danger satellite meshes (individual) ─────────────────────────────────
+    // Use same procedural satellite shape; replaced by GLTF if available
+    const dGeoFallback = this._buildProceduralSatGeo();
     this.dangerMatA = new THREE.MeshPhongMaterial({ color: COL.satNormal, emissive: COL.satNormal, emissiveIntensity: 0.4, shininess: 120 });
     this.dangerMatB = this.dangerMatA.clone();
     this.dangerMeshA = new THREE.Mesh(dGeoFallback, this.dangerMatA);
@@ -528,9 +531,8 @@ class AstralScene {
     this.riskRingMatB = this.riskRingB.material;
 
     // ── Active satellite glow meshes (Phase 2) ────────────────────────────────
-    // 14 individual glowing cyan spheres placed on the active orbit positions
-    // These are separate from the instanced pool so they can be individually bright
-    const activeGlowGeo = new THREE.SphereGeometry(0.055, 8, 8);
+    // Same procedural satellite shape, glowing cyan — individual not instanced
+    const activeGlowGeo = this._buildProceduralSatGeo();
     const activeGlowMat = new THREE.MeshPhongMaterial({
       color: COL.satActive, emissive: COL.satActive, emissiveIntensity: 2.2,
       shininess: 120, transparent: true, opacity: 1.0,
@@ -554,6 +556,38 @@ class AstralScene {
       this.earthSystem.add(sp);
       return sp;
     });
+  }
+
+  /**
+   * Build a procedural satellite geometry: rectangular body + two solar panel wings.
+   * All parts are merged into one BufferGeometry so it works with InstancedMesh.
+   * Size is normalized to fit inside a ~0.055 world-unit bounding sphere.
+   */
+  _buildProceduralSatGeo() {
+    // ── Body: flat rectangular box (satellite bus) ──
+    const bodyGeo = new THREE.BoxGeometry(0.055, 0.022, 0.038);
+
+    // ── Solar panels: two thin wide rectangles, one each side ──
+    const panelGeo = new THREE.BoxGeometry(0.075, 0.004, 0.028);
+
+    // Offset left and right panels along X axis
+    const leftMatrix  = new THREE.Matrix4().makeTranslation(-0.068, 0, 0);
+    const rightMatrix = new THREE.Matrix4().makeTranslation( 0.068, 0, 0);
+
+    // Apply transforms to panel geometry copies
+    const panelL = panelGeo.clone().applyMatrix4(leftMatrix);
+    const panelR = panelGeo.clone().applyMatrix4(rightMatrix);
+
+    // ── Merge all three parts into one geometry ──
+    const merged = mergeGeometries([bodyGeo, panelL, panelR]);
+
+    // Clean up intermediates
+    bodyGeo.dispose();
+    panelGeo.dispose();
+    panelL.dispose();
+    panelR.dispose();
+
+    return merged;
   }
 
   /** Build / rebuild the instanced mesh from a given geometry */
