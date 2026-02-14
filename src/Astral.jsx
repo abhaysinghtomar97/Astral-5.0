@@ -434,7 +434,7 @@ class AstralScene {
     // Load satellite.glb — extract first mesh geometry for instancing
     const loader = new GLTFLoader();
     loader.load(
-      "/satellite.glb",
+      "/earth.glb",
       (gltf) => {
         let satGeo = null;
 
