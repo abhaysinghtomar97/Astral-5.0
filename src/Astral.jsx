@@ -1331,7 +1331,7 @@ function Header({ chapter }) {
       background: "linear-gradient(to bottom, rgba(1,8,18,0.7) 0%, transparent 100%)",
     }}>
       {/* Logo */}
-      <div>
+      <div style={{ pointerEvents: "auto" }}>
         <div style={{
           fontSize: "22px", fontFamily: "'Georgia', serif",
           fontWeight: "300", color: "#fff",
@@ -1342,10 +1342,12 @@ function Header({ chapter }) {
         <div style={{
           fontSize: "9px", letterSpacing: "0.4em",
           color: "rgba(160,190,255,0.5)", fontFamily: "'Courier New', monospace",
-          textTransform: "uppercase",
+          textTransform: "uppercase", marginBottom: "2px",
         }}>
           Orbital Risk Intelligence
         </div>
+        {/* Interactive curved string — sits flush below the logo text */}
+        <CurvedString accent={ch.accent} />
       </div>
 
       {/* Status */}
@@ -1438,8 +1440,86 @@ function MetricsTicker({ chapter }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CANVAS (pure Three.js, mounts once)
+// CURVED STRING — sits directly below the ASTRAL logo, same width as the text
+// Spring physics snap-back, no external dependencies
 // ─────────────────────────────────────────────────────────────────────────────
+
+function CurvedString({ accent }) {
+  const pathRef      = useRef(null);
+  const containerRef = useRef(null);
+  const animRef      = useRef(null);
+  const stateRef     = useRef({ cx: 50, cy: 10, vx: 0, vy: 0 });
+
+  const REST_X = 50, REST_Y = 10;   // resting control point (center, flat)
+
+  const applyPath = () => {
+    if (!pathRef.current) return;
+    const { cx, cy } = stateRef.current;
+    pathRef.current.setAttribute("d", `M 0 10 Q ${cx} ${cy} 100 10`);
+  };
+
+  const runSnapBack = () => {
+    if (animRef.current) cancelAnimationFrame(animRef.current);
+    const tick = () => {
+      const s  = stateRef.current;
+      s.vx = (s.vx + (REST_X - s.cx) * 0.055) * 0.60;
+      s.vy = (s.vy + (REST_Y - s.cy) * 0.055) * 0.60;
+      s.cx += s.vx;
+      s.cy += s.vy;
+      applyPath();
+      if (Math.abs(s.vx) > 0.05 || Math.abs(s.vy) > 0.05 ||
+          Math.abs(s.cx - REST_X) > 0.05 || Math.abs(s.cy - REST_Y) > 0.05) {
+        animRef.current = requestAnimationFrame(tick);
+      } else {
+        s.cx = REST_X; s.cy = REST_Y; s.vx = 0; s.vy = 0;
+        applyPath();
+      }
+    };
+    animRef.current = requestAnimationFrame(tick);
+  };
+
+  const handleMouseMove = (e) => {
+    if (animRef.current) { cancelAnimationFrame(animRef.current); animRef.current = null; }
+    const b  = containerRef.current.getBoundingClientRect();
+    // Map to SVG viewBox (0–100 × 0–20)
+    const cx = ((e.clientX - b.left)  / b.width)  * 100;
+    const cy = ((e.clientY - b.top)   / b.height) * 20;
+    stateRef.current = { cx, cy, vx: 0, vy: 0 };
+    applyPath();
+  };
+
+  useEffect(() => () => { if (animRef.current) cancelAnimationFrame(animRef.current); }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={runSnapBack}
+      style={{ width: "100%", marginTop: "8px", cursor: "crosshair", pointerEvents: "auto" }}
+    >
+      <svg
+        width="100%" height="20"
+        viewBox="0 0 100 20"
+        preserveAspectRatio="none"
+        style={{ display: "block", overflow: "visible" }}
+      >
+        {/* Soft glow behind */}
+        <path
+          d="M 0 10 Q 50 10 100 10"
+          stroke={accent} strokeWidth="4" fill="transparent"
+          opacity="0.12" style={{ filter: "blur(2px)" }}
+        />
+        {/* Main interactive line */}
+        <path
+          ref={pathRef}
+          d="M 0 10 Q 50 10 100 10"
+          stroke={accent} strokeWidth="0.8"
+          fill="transparent" opacity="0.6"
+        />
+      </svg>
+    </div>
+  );
+}
 
 function ThreeCanvas({ progressRef }) {
   const canvasRef = useRef(null);
