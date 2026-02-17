@@ -1424,7 +1424,7 @@ body{background:${C.bg};overflow-x:hidden;cursor:none;font-family:${F.sans}}
    §12 MAIN APP
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export default function AstralApp() {
+export default function Astral() {
   const { raw, smooth, velocity, scrolling, chapter } = useLocoScroll();
   const mouse = useMouseSystem();
   const [loaded, setLoaded] = useState(false);
